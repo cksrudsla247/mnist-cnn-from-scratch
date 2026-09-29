@@ -1,0 +1,7 @@
+# MNIST is downloaded on first use
+dataset/*.gz
+dataset/mnist.pkl
+
+# python
+__pycache__/
+*.pyc
