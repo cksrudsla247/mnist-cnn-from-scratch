@@ -1,10 +1,10 @@
 # coding: utf-8
 """
-explore_array.py
+analyze_hw.py
 
 Sweep the PE array shape (ROWS x COLS) and report, per layer and in total:
 
-    cycles            what the accelerator actually spends
+    cycles            estimates under this model's assumptions
     DRAM traffic      input words, weight words, output words
     PE utilisation    useful MACs / MAC slots offered
     FPGA resources    LUT, DSP, BRAM36 on XC7Z020
@@ -12,13 +12,21 @@ Sweep the PE array shape (ROWS x COLS) and report, per layer and in total:
 ROWS = reduction axis  (input channels, or C*R*S when im2col'd)
 COLS = output channels computed in parallel
 
+Historical design-space model: NET below uses Conv3 pad1 / Affine-1152,
+whereas convnet_hw.py uses Conv3 pad0 / Affine-512. The simplified compute
+model is not the current four-state RTL pixel schedule. Keep these estimates
+separate from RTL simulation and on-board timing measurements.
+
+AI-assisted comparison script; candidate results and the 8x32 array selection
+were evaluated by the project author.
+
 Calibrated against the Task 1 synthesis report:
     1024 PE  ->  86,368 LUT   (84.3 LUT per PE, DSP mostly not inferred)
     non-PE logic ~5,500 LUT
 
 Usage
-    python explore_array.py                  # sweep the built-in candidates
-    python explore_array.py 16 32            # just report ROWS=16, COLS=32
+    python analyze_hw.py                  # sweep the built-in candidates
+    python analyze_hw.py 16 32            # just report ROWS=16, COLS=32
 """
 import sys
 

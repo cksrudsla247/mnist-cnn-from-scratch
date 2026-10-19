@@ -1,8 +1,17 @@
-# MNIST CNN from Scratch — convolution, pooling and BatchNorm backward derived by hand
+# MNIST CNN in NumPy — learning code and the KV260 reference network
 
 **Conv / MaxPool / BatchNorm forward *and* backward implemented in NumPy, first with raw nested loops, then vectorised with im2col — and finally the VGG-style network that the [KV260 CNN accelerator](https://github.com/cksrudsla247/kv260-cnn-accelerator) runs in hardware.**
 
 Winter Intern, EASY Lab · 2026.01 – 2026.02
+
+The repository also contains later hardware-reference and array-exploration
+code; the internship dates do not date every file in this repository.
+
+### 코드 출처와 AI 활용 / Code provenance and AI assistance
+
+이 저장소에는 교재 기반 코드와 프로젝트에서 추가·수정한 코드가 함께 있습니다. 아래 Credits에서 재사용한 공통 계층·optimizer·loader와 확장 부분을 구분합니다.
+
+PE 배열 비교용 `analyze_hw.py`는 AI를 활용해 작성했고, 후보 결과의 비교와 8×32 배열 선택은 직접 수행했습니다. `from scratch`는 NumPy 기반 구현을 뜻하며, 모든 코드를 참고 자료나 AI 도움 없이 단독 작성했다는 의미로 사용하지 않습니다. 프로젝트 추가 파일이라는 분류도 개별 코드의 단독 수작업 작성을 뜻하지 않습니다.
 
 ---
 
@@ -23,10 +32,10 @@ dataset/mnist.py        MNIST loader (downloads the idx files on first use)
 params_hw.pkl           trained weights of convnet_hw (the accelerator's network)
 ```
 
-No deep-learning framework. Every gradient is derived from the computation graph
-by hand and coded directly.
+The network uses NumPy without a deep-learning framework. The following sections
+explain the forward and backward computations; code origins are listed in Credits.
 
-### 1.1 Convolution backward — derived, not looked up
+### 1.1 Convolution backward
 
 Three gradients are needed: `dW`, `db`, `dx`.
 
@@ -53,7 +62,7 @@ each window. Backward routes `dout` to exactly that position and zeros everythin
 else — so the 1-D index has to be converted back to 2-D: `quotient = row`,
 `remainder = column`, dividing by the pool width.
 
-### 1.3 BatchNorm — two versions, both derived
+### 1.3 BatchNorm — MLP and CNN versions
 
 - **`BatchNorm_MLP`** — forward and backward drawn as a computation graph and
   transcribed step by step. The subtlety: the mean reduces `(N, D)` to `(D,)`, so
@@ -174,7 +183,8 @@ Affine   512 ->  10                                        (128 * 2 * 2)
 
 **MNIST accuracy with `params_hw.pkl`: 99.13%** (float, all 10,000 test images),
 trained by `run_hw.py` (Momentum, He init, lr 0.03, batch 100, 8 epochs on 20,000
-images). The INT8 version that the accelerator runs scores **99.17%**.
+images). The Python INT8 inference model scores **99.17%** on the 10,000-image
+MNIST test set. This is separate from the board's single-image output-word check.
 
 Note `Conv3` uses **pad 0**, giving `7x7 → 5x5 → pool → 2x2`. Pooling a 5×5 map
 gives `int((5-2)/2 + 1) = 2`, so the last row and column are discarded — an
@@ -182,13 +192,22 @@ odd-dimension pooling case that later became part of the RTL regression set.
 
 **→ This network, quantised to INT8, is what
 [kv260-cnn-accelerator](https://github.com/cksrudsla247/kv260-cnn-accelerator)
-runs — bit-exact across all 6 layers in simulation and on a Kria KV260 board.**
+runs — a six-layer single-image run whose 928 surviving output words match in
+simulation and on a Kria KV260 board.**
 
 ### 3.1 `analyze_hw.py` — PE array shape cost model
 
 A cycle and resource model for the accelerator, calibrated against a Task 1
 synthesis report, used to choose the PE array shape. Excerpt of
 `python analyze_hw.py` (model estimates, not measurements):
+
+**Model version:** the script retains an earlier network with Conv3 pad1 and
+Affine input 1152. The final `convnet_hw.py` instead uses Conv3 pad0 and Affine
+input 512. The model also uses simplified 1/2-cycle compute and memory assumptions;
+the current RTL pixel loop has four states. These estimates explain the earlier
+array comparison and are not final RTL cycle counts, board measurements or a
+measurement-backed speed-up claim. The historical model is retained so the table
+can still be traced to its assumptions.
 
 | array (rows x cols) | PE | model cycles | model LUT (XC7Z020) |
 |---|---|---|---|
@@ -198,7 +217,8 @@ synthesis report, used to choose the PE array shape. Excerpt of
 | **8 x 32** | **256** | **222,935** | **51%** |
 | 32 x 8 | 256 | 319,302 | 51% |
 
-At 256 PEs, 16x16 needs 11% and 32x8 needs 43% more cycles than 8x32.
+For this model at 256 PEs, 16x16 needs approximately 11% and 32x8 approximately
+43% more estimated cycles than 8x32.
 
 ---
 
@@ -254,7 +274,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   `col2im` helpers, and the `Relu`, `Affine` and `SoftmaxWithLoss` layers.
 - From the book, extended here: `simple_convnet.py` (BatchNorm added), and the
   training and test loops.
-- Written for this project: the four-nested-loop `Convolution` / `Pooling`
+- Project-specific additions and modifications (including AI-assisted code):
+  the four-nested-loop `Convolution` / `Pooling`
   forward and backward, `BatchNorm_MLP` / `BatchNorm_CNN` with running
   statistics, `convnet_hw.py`, `run_hw.py`, `analyze_hw.py`.
 
